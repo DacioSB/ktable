@@ -1,4 +1,5 @@
 package com.example.ktable;
+
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.time.Duration;
@@ -16,12 +17,8 @@ import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
-/**
- * Hello world!
- *
- */
-public class App 
-{
+
+public class KTableExample {
     static void runKafkaStreams(final KafkaStreams streams) {
         final CountDownLatch latch = new CountDownLatch(1);
         streams.setStateListener((newState, oldState) -> {
@@ -44,16 +41,22 @@ public class App
         final StreamsBuilder builder = new StreamsBuilder();
         final String inputTopic = allProps.getProperty("basic.input.topic");
         final String streamsOutputTopic = allProps.getProperty("basic.output.topic");
-        final String tableOutputTopic = allProps.getProperty("ktable.output.topic");
+        final String tableOutputTopic = allProps.getProperty("ktable.example.output.topic");
 
         final Serde<String> stringSerde = Serdes.String();
 
         final KStream<String, String> stream = builder.stream(inputTopic, Consumed.with(stringSerde, stringSerde)).peek((k,v) -> System.out.println("Observed event: " + v));
 
-        final KTable<String, String> convertedTable = stream.toTable(Materialized.as("stream-converted-to-table"));
+        final KTable<String, String> convertedTable = stream.toTable(Materialized.as("stream-example-converted-to-table"));
 
         stream.to(streamsOutputTopic, Produced.with(stringSerde, stringSerde));
-        convertedTable.toStream().to(tableOutputTopic, Produced.with(stringSerde, stringSerde));
+        convertedTable
+        .filter((key, value) -> value.contains("orderNumber-"))
+        .mapValues(value -> value.substring(value.indexOf("-") + 1))
+        .filter((key, value) -> Long.parseLong(value) > 1000)
+        .toStream()
+        .peek((key, value) -> System.out.println("Outgoing record - key " + key + " value " + value))
+        .to(tableOutputTopic, Produced.with(stringSerde, stringSerde));
 
 
         return builder.build();
